@@ -1,405 +1,458 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import {
-  Plus, Trash2, PanelLeftClose, PanelLeftOpen, Save, FileText,
-  Search, Network, CornerDownRight, X
-} from 'lucide-react';
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>我的筆記</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --indigo: #6366f1; --indigo-d: #4f46e5;
+    --emerald: #10b981; --emerald-d: #059669;
+    --slate50:#f8fafc; --slate100:#f1f5f9; --slate200:#e2e8f0;
+    --slate300:#cbd5e1; --slate400:#94a3b8; --slate800:#1e293b;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang HK", "Microsoft JhengHei", sans-serif;
+    height: 100vh; overflow: hidden; color: var(--slate800); background: var(--slate50);
+  }
+  .app { display: flex; height: 100vh; }
 
-export default function NotesApp() {
-  const [notes, setNotes] = useState([]);
-  const [activeId, setActiveId] = useState(null);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [search, setSearch] = useState('');
-  const [saved, setSaved] = useState(false);
+  /* Sidebar */
+  .sidebar {
+    width: 288px; background: #fff; border-right: 1px solid var(--slate200);
+    display: flex; flex-direction: column; transition: width .3s, min-width .3s; overflow: hidden;
+  }
+  .sidebar.collapsed { width: 0; min-width: 0; }
+  .side-head { padding: 16px; border-bottom: 1px solid var(--slate200); }
+  .side-title { font-size: 18px; font-weight: 700; display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+  .side-title svg { color: var(--indigo); }
+  .new-btns { display: flex; gap: 8px; }
+  .new-btns button {
+    flex: 1; display: flex; align-items: center; justify-content: center; gap: 4px;
+    padding: 8px; border: none; border-radius: 8px; color: #fff; font-size: 14px;
+    cursor: pointer; transition: background .2s;
+  }
+  .btn-note { background: var(--indigo); }
+  .btn-note:hover { background: var(--indigo-d); }
+  .btn-map { background: var(--emerald); }
+  .btn-map:hover { background: var(--emerald-d); }
 
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem('my-notes-v2');
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        setNotes(parsed);
-        if (parsed.length > 0) setActiveId(parsed[0].id);
-      }
-    } catch (e) {}
-  }, []);
+  .search-wrap { padding: 12px; border-bottom: 1px solid var(--slate100); position: relative; }
+  .search-wrap svg { position: absolute; left: 22px; top: 21px; color: var(--slate400); }
+  .search-wrap input {
+    width: 100%; padding: 8px 12px 8px 34px; font-size: 14px; border-radius: 8px;
+    background: var(--slate100); border: 1px solid transparent; outline: none;
+  }
+  .search-wrap input:focus { background: #fff; border-color: #c7d2fe; }
 
-  const persist = (list) => {
-    setNotes(list);
-    try {
-      localStorage.setItem('my-notes-v2', JSON.stringify(list));
-    } catch (e) {}
-  };
+  .list { flex: 1; overflow-y: auto; }
+  .empty-list { text-align: center; font-size: 14px; color: var(--slate400); margin-top: 32px; padding: 0 16px; }
+  .item {
+    padding: 12px 16px; cursor: pointer; border-bottom: 1px solid #f8fafc;
+    border-left: 4px solid transparent; display: flex; justify-content: space-between; gap: 8px;
+  }
+  .item:hover { background: var(--slate50); }
+  .item.active { background: #eef2ff; border-left-color: var(--indigo); }
+  .item-main { min-width: 0; flex: 1; }
+  .item-title { font-weight: 500; font-size: 14px; display: flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .item-title svg { flex-shrink: 0; }
+  .item-preview { font-size: 12px; color: var(--slate400); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+  .item-date { font-size: 12px; color: var(--slate300); margin-top: 4px; }
+  .del-btn { opacity: 0; border: none; background: none; cursor: pointer; color: var(--slate400); padding: 4px; }
+  .item:hover .del-btn { opacity: 1; }
+  .del-btn:hover { color: #ef4444; }
 
-  const activeNote = notes.find((n) => n.id === activeId);
+  /* Main */
+  .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .topbar { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--slate200); background: #fff; }
+  .icon-btn { padding: 8px; border: none; background: none; border-radius: 8px; cursor: pointer; color: #475569; display: flex; }
+  .icon-btn:hover { background: var(--slate100); }
+  .title-input { flex: 1; font-size: 18px; font-weight: 600; border: none; outline: none; background: transparent; }
+  .save-btn {
+    display: flex; align-items: center; gap: 8px; padding: 8px 16px; border: none;
+    border-radius: 8px; background: var(--indigo); color: #fff; font-size: 14px; font-weight: 500; cursor: pointer;
+  }
+  .save-btn:hover { background: var(--indigo-d); }
 
-  const createNote = (type) => {
-    const base = {
-      id: Date.now(),
-      type,
-      title: '',
-      updatedAt: Date.now(),
-    };
-    let newNote;
-    if (type === 'mindmap') {
-      newNote = {
-        ...base,
-        nodes: [
-          { id: 'root', parentId: null, text: '中心主題', x: 300, y: 220 },
-        ],
-      };
-    } else {
-      newNote = { ...base, body: '' };
+  .empty-main { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--slate400); }
+  .empty-main svg { opacity: .3; margin-bottom: 16px; }
+
+  .note-editor { flex: 1; display: flex; padding: 24px 48px; overflow: hidden; }
+  .note-editor textarea {
+    flex: 1; width: 100%; resize: none; border: none; outline: none; background: transparent;
+    font-size: 16px; line-height: 1.7; font-family: inherit;
+  }
+
+  /* Mindmap */
+  .map-wrap { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: var(--slate100); }
+  .map-hint { padding: 8px 16px; font-size: 12px; color: #64748b; background: #fff; border-bottom: 1px solid var(--slate200); }
+  .canvas-scroll { position: relative; flex: 1; overflow: auto; }
+  .canvas { position: relative; width: 2000px; height: 1400px; }
+  .canvas svg { position: absolute; top: 0; left: 0; pointer-events: none; }
+  .node {
+    position: absolute; transform: translate(-50%, -50%); border-radius: 12px;
+    box-shadow: 0 2px 6px rgba(0,0,0,.12); border: 2px solid var(--slate300);
+    background: #fff; cursor: grab; user-select: none; max-width: 220px;
+  }
+  .node:active { cursor: grabbing; }
+  .node.root { background: var(--emerald); border-color: var(--emerald-d); color: #fff; }
+  .node-inner { padding: 8px 16px; }
+  .node-inner span { font-size: 14px; font-weight: 500; white-space: nowrap; }
+  .node-inner input { border: none; outline: none; background: transparent; font-size: 14px; width: 120px; color: inherit; font-family: inherit; }
+  .node-btns { position: absolute; right: -8px; top: -8px; display: flex; gap: 4px; opacity: 0; transition: opacity .2s; }
+  .node:hover .node-btns { opacity: 1; }
+  .node-btns button {
+    width: 24px; height: 24px; border-radius: 50%; border: none; color: #fff;
+    display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,.2);
+  }
+  .add-btn { background: var(--indigo); } .add-btn:hover { background: var(--indigo-d); }
+  .rm-btn { background: #ef4444; } .rm-btn:hover { background: #dc2626; }
+
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- Sidebar -->
+  <aside class="sidebar" id="sidebar">
+    <div class="side-head">
+      <div class="side-title">
+        <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+        我的筆記
+      </div>
+      <div class="new-btns">
+        <button class="btn-note" onclick="createNote('note')">＋ 筆記</button>
+        <button class="btn-map" onclick="createNote('mindmap')">＋ 心智圖</button>
+      </div>
+    </div>
+    <div class="search-wrap">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      <input id="search" placeholder="搜尋…" oninput="renderList()">
+    </div>
+    <div class="list" id="list"></div>
+  </aside>
+
+  <!-- Main -->
+  <main class="main">
+    <div class="topbar">
+      <button class="icon-btn" onclick="toggleSidebar()" id="toggleBtn" title="收埋/展開側欄">
+        <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/></svg>
+      </button>
+      <input class="title-input hidden" id="titleInput" placeholder="標題…" oninput="onTitleChange()">
+      <button class="save-btn hidden" id="saveBtn" onclick="saveNote()">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>
+        <span id="saveLabel">儲存</span>
+      </button>
+    </div>
+
+    <div class="empty-main" id="emptyMain">
+      <svg width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+      <p>撳左邊按鈕新增筆記或心智圖</p>
+    </div>
+
+    <div class="note-editor hidden" id="noteEditor">
+      <textarea id="noteBody" placeholder="喺度開始打字…" oninput="onBodyChange()"></textarea>
+    </div>
+
+    <div class="map-wrap hidden" id="mapWrap">
+      <div class="map-hint">提示：撳節點右上角藍掣加子節點 · 拖曳移動 · 雙擊改字 · 紅掣刪除</div>
+      <div class="canvas-scroll" id="canvasScroll">
+        <div class="canvas" id="canvas">
+          <svg id="lines" width="2000" height="1400"></svg>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+let notes = [];
+let activeId = null;
+
+// ---- 儲存 ----
+function load() {
+  try {
+    const raw = localStorage.getItem('my-notes-html');
+    if (raw) {
+      notes = JSON.parse(raw);
+      if (notes.length) activeId = notes[0].id;
     }
-    const list = [newNote, ...notes];
-    persist(list);
-    setActiveId(newNote.id);
-  };
+  } catch(e){}
+}
+function persist() {
+  try { localStorage.setItem('my-notes-html', JSON.stringify(notes)); } catch(e){}
+}
 
-  const updateActive = (patch) => {
-    const list = notes.map((n) =>
-      n.id === activeId ? { ...n, ...patch, updatedAt: Date.now() } : n
-    );
-    persist(list);
-  };
+function getActive() { return notes.find(n => n.id === activeId); }
 
-  const saveNote = () => {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 1500);
-  };
+function createNote(type) {
+  const base = { id: Date.now(), type, title: '', updatedAt: Date.now() };
+  let n;
+  if (type === 'mindmap') {
+    n = { ...base, nodes: [{ id: 'root', parentId: null, text: '中心主題', x: 400, y: 300 }] };
+  } else {
+    n = { ...base, body: '' };
+  }
+  notes.unshift(n);
+  activeId = n.id;
+  persist(); renderAll();
+}
 
-  const deleteNote = (id) => {
-    const list = notes.filter((n) => n.id !== id);
-    persist(list);
-    if (activeId === id) setActiveId(list.length > 0 ? list[0].id : null);
-  };
+function deleteNote(id, e) {
+  e.stopPropagation();
+  notes = notes.filter(n => n.id !== id);
+  if (activeId === id) activeId = notes.length ? notes[0].id : null;
+  persist(); renderAll();
+}
 
-  const formatDate = (ts) => {
-    const d = new Date(ts);
-    return (
-      d.toLocaleDateString('zh-HK', { month: 'short', day: 'numeric' }) +
-      ' ' +
-      d.toLocaleTimeString('zh-HK', { hour: '2-digit', minute: '2-digit' })
-    );
-  };
+function selectNote(id) { activeId = id; renderAll(); }
 
-  const filtered = notes.filter((n) => {
-    const q = search.toLowerCase();
-    const inTitle = (n.title || '').toLowerCase().includes(q);
-    const inBody = (n.body || '').toLowerCase().includes(q);
-    const inNodes = (n.nodes || []).some((nd) =>
-      (nd.text || '').toLowerCase().includes(q)
-    );
+function toggleSidebar() { document.getElementById('sidebar').classList.toggle('collapsed'); }
+
+function formatDate(ts) {
+  const d = new Date(ts);
+  return d.toLocaleDateString('zh-HK',{month:'short',day:'numeric'}) + ' ' +
+         d.toLocaleTimeString('zh-HK',{hour:'2-digit',minute:'2-digit'});
+}
+
+const noteIcon = '<svg width="14" height="14" fill="none" stroke="#818cf8" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>';
+const mapIcon = '<svg width="14" height="14" fill="none" stroke="#10b981" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="5" r="3"/><circle cx="5" cy="19" r="3"/><circle cx="19" cy="19" r="3"/><path d="M12 8v3m0 0-5 5m5-5 5 5"/></svg>';
+
+function renderList() {
+  const q = document.getElementById('search').value.toLowerCase();
+  const listEl = document.getElementById('list');
+  const filtered = notes.filter(n => {
+    const inTitle = (n.title||'').toLowerCase().includes(q);
+    const inBody = (n.body||'').toLowerCase().includes(q);
+    const inNodes = (n.nodes||[]).some(nd => (nd.text||'').toLowerCase().includes(q));
     return inTitle || inBody || inNodes;
   });
-
-  return (
-    <div className="flex h-screen w-full bg-slate-50 text-slate-800 font-sans overflow-hidden">
-      {/* Sidebar */}
-      <aside
-        className={`flex flex-col bg-white border-r border-slate-200 transition-all duration-300 ${
-          sidebarOpen ? 'w-72' : 'w-0'
-        } overflow-hidden`}
-      >
-        <div className="p-4 border-b border-slate-200">
-          <h1 className="font-bold text-lg flex items-center gap-2 mb-3">
-            <FileText size={20} className="text-indigo-500" />
-            我的筆記
-          </h1>
-          <div className="flex gap-2">
-            <button
-              onClick={() => createNote('note')}
-              className="flex-1 flex items-center justify-center gap-1 py-2 rounded-lg bg-indigo-500 text-white text-sm hover:bg-indigo-600 transition"
-            >
-              <Plus size={16} /> 筆記
-            </button>
-            <button
-              onClick={() => createNote('mindmap')}
-              className="flex-1 flex items-center justify-center gap-1 py-2 rounded-lg bg-emerald-500 text-white text-sm hover:bg-emerald-600 transition"
-            >
-              <Network size={16} /> 心智圖
-            </button>
-          </div>
-        </div>
-
-        <div className="p-3 border-b border-slate-100">
-          <div className="relative">
-            <Search size={16} className="absolute left-3 top-2.5 text-slate-400" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="搜尋…"
-              className="w-full pl-9 pr-3 py-2 text-sm rounded-lg bg-slate-100 focus:bg-white border border-transparent focus:border-indigo-300 outline-none transition"
-            />
-          </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto">
-          {filtered.length === 0 && (
-            <p className="text-center text-sm text-slate-400 mt-8 px-4">
-              未有記錄，撳上面按鈕新增
-            </p>
-          )}
-          {filtered.map((n) => (
-            <div
-              key={n.id}
-              onClick={() => setActiveId(n.id)}
-              className={`group px-4 py-3 cursor-pointer border-b border-slate-50 flex items-start justify-between gap-2 ${
-                activeId === n.id
-                  ? 'bg-indigo-50 border-l-4 border-l-indigo-500'
-                  : 'hover:bg-slate-50 border-l-4 border-l-transparent'
-              }`}
-            >
-              <div className="min-w-0 flex-1">
-                <p className="font-medium text-sm truncate flex items-center gap-1.5">
-                  {n.type === 'mindmap' ? (
-                    <Network size={14} className="text-emerald-500 shrink-0" />
-                  ) : (
-                    <FileText size={14} className="text-indigo-400 shrink-0" />
-                  )}
-                  {n.title || (n.type === 'mindmap' ? '未命名心智圖' : '未命名筆記')}
-                </p>
-                <p className="text-xs text-slate-400 truncate mt-0.5">
-                  {n.type === 'mindmap'
-                    ? `${(n.nodes || []).length} 個節點`
-                    : n.body
-                    ? n.body.slice(0, 40)
-                    : '無內容'}
-                </p>
-                <p className="text-xs text-slate-300 mt-1">{formatDate(n.updatedAt)}</p>
-              </div>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  deleteNote(n.id);
-                }}
-                className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-red-500 transition"
-              >
-                <Trash2 size={16} />
-              </button>
-            </div>
-          ))}
-        </div>
-      </aside>
-
-      {/* Main */}
-      <main className="flex-1 flex flex-col min-w-0">
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-200 bg-white">
-          <button
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="p-2 rounded-lg hover:bg-slate-100 text-slate-600 transition"
-          >
-            {sidebarOpen ? <PanelLeftClose size={20} /> : <PanelLeftOpen size={20} />}
-          </button>
-          {activeNote && (
-            <input
-              value={activeNote.title}
-              onChange={(e) => updateActive({ title: e.target.value })}
-              placeholder={activeNote.type === 'mindmap' ? '心智圖標題…' : '筆記標題…'}
-              className="flex-1 text-lg font-semibold outline-none bg-transparent placeholder-slate-300"
-            />
-          )}
-          {activeNote && (
-            <button
-              onClick={saveNote}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-500 text-white text-sm font-medium hover:bg-indigo-600 transition shrink-0"
-            >
-              <Save size={16} />
-              {saved ? '已儲存 ✓' : '儲存'}
-            </button>
-          )}
-        </div>
-
-        {!activeNote && (
-          <div className="flex-1 flex flex-col items-center justify-center text-slate-400">
-            <FileText size={48} className="mb-4 opacity-30" />
-            <p>撳左邊按鈕新增筆記或心智圖</p>
-          </div>
-        )}
-
-        {activeNote && activeNote.type === 'note' && (
-          <div className="flex-1 flex flex-col overflow-hidden px-6 md:px-12 py-6">
-            <textarea
-              value={activeNote.body}
-              onChange={(e) => updateActive({ body: e.target.value })}
-              placeholder="喺度開始打字…"
-              className="flex-1 w-full resize-none outline-none bg-transparent text-base leading-relaxed placeholder-slate-300"
-            />
-          </div>
-        )}
-
-        {activeNote && activeNote.type === 'mindmap' && (
-          <MindMap
-            nodes={activeNote.nodes}
-            onChange={(nodes) => updateActive({ nodes })}
-          />
-        )}
-      </main>
-    </div>
-  );
+  if (!filtered.length) {
+    listEl.innerHTML = '<p class="empty-list">未有記錄，撳上面按鈕新增</p>';
+    return;
+  }
+  listEl.innerHTML = filtered.map(n => {
+    const icon = n.type === 'mindmap' ? mapIcon : noteIcon;
+    const defTitle = n.type === 'mindmap' ? '未命名心智圖' : '未命名筆記';
+    const preview = n.type === 'mindmap'
+      ? `${(n.nodes||[]).length} 個節點`
+      : (n.body ? n.body.slice(0,40) : '無內容');
+    return `<div class="item ${n.id===activeId?'active':''}" onclick="selectNote(${n.id})">
+      <div class="item-main">
+        <div class="item-title">${icon}${escapeHtml(n.title || defTitle)}</div>
+        <div class="item-preview">${escapeHtml(preview)}</div>
+        <div class="item-date">${formatDate(n.updatedAt)}</div>
+      </div>
+      <button class="del-btn" onclick="deleteNote(${n.id}, event)">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+      </button>
+    </div>`;
+  }).join('');
 }
 
-function MindMap({ nodes, onChange }) {
-  const containerRef = useRef(null);
-  const [editingId, setEditingId] = useState(null);
-  const dragRef = useRef(null);
+function escapeHtml(s){ return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
-  const getNode = (id) => nodes.find((n) => n.id === id);
+function renderMain() {
+  const n = getActive();
+  const emptyMain = document.getElementById('emptyMain');
+  const noteEditor = document.getElementById('noteEditor');
+  const mapWrap = document.getElementById('mapWrap');
+  const titleInput = document.getElementById('titleInput');
+  const saveBtn = document.getElementById('saveBtn');
 
-  const addChild = (parentId) => {
-    const parent = getNode(parentId);
-    const newNode = {
-      id: 'n' + Date.now(),
-      parentId,
-      text: '新節點',
-      x: parent.x + 160,
-      y: parent.y + (Math.random() * 120 - 60),
-    };
-    onChange([...nodes, newNode]);
-    setEditingId(newNode.id);
-  };
+  if (!n) {
+    emptyMain.classList.remove('hidden');
+    noteEditor.classList.add('hidden');
+    mapWrap.classList.add('hidden');
+    titleInput.classList.add('hidden');
+    saveBtn.classList.add('hidden');
+    return;
+  }
+  emptyMain.classList.add('hidden');
+  titleInput.classList.remove('hidden');
+  saveBtn.classList.remove('hidden');
+  titleInput.value = n.title || '';
+  titleInput.placeholder = n.type === 'mindmap' ? '心智圖標題…' : '筆記標題…';
 
-  const deleteNode = (id) => {
-    if (id === 'root') return;
-    // 連同所有後代一齊刪
-    const toDelete = new Set([id]);
-    let changed = true;
-    while (changed) {
-      changed = false;
-      nodes.forEach((n) => {
-        if (n.parentId && toDelete.has(n.parentId) && !toDelete.has(n.id)) {
-          toDelete.add(n.id);
-          changed = true;
-        }
-      });
+  if (n.type === 'note') {
+    noteEditor.classList.remove('hidden');
+    mapWrap.classList.add('hidden');
+    document.getElementById('noteBody').value = n.body || '';
+  } else {
+    noteEditor.classList.add('hidden');
+    mapWrap.classList.remove('hidden');
+    renderMap();
+  }
+}
+
+function renderAll() { renderList(); renderMain(); }
+
+function onTitleChange() {
+  const n = getActive(); if(!n) return;
+  n.title = document.getElementById('titleInput').value;
+  n.updatedAt = Date.now();
+  persist(); renderList();
+}
+function onBodyChange() {
+  const n = getActive(); if(!n) return;
+  n.body = document.getElementById('noteBody').value;
+  n.updatedAt = Date.now();
+  persist(); renderList();
+}
+function saveNote() {
+  const label = document.getElementById('saveLabel');
+  label.textContent = '已儲存 ✓';
+  setTimeout(()=> label.textContent = '儲存', 1500);
+}
+
+/* ---------- 心智圖 ---------- */
+let editingNodeId = null;
+let drag = null;
+
+function renderMap() {
+  const n = getActive(); if(!n || n.type!=='mindmap') return;
+  const canvas = document.getElementById('canvas');
+  const lines = document.getElementById('lines');
+
+  // 連線
+  let lineHtml = '';
+  n.nodes.forEach(nd => {
+    if (!nd.parentId) return;
+    const p = n.nodes.find(x => x.id === nd.parentId);
+    if (!p) return;
+    lineHtml += `<line x1="${p.x}" y1="${p.y}" x2="${nd.x}" y2="${nd.y}" stroke="#94a3b8" stroke-width="2"/>`;
+  });
+  lines.innerHTML = lineHtml;
+
+  // 移除舊節點
+  canvas.querySelectorAll('.node').forEach(el => el.remove());
+
+  n.nodes.forEach(nd => {
+    const isRoot = nd.id === 'root';
+    const el = document.createElement('div');
+    el.className = 'node' + (isRoot ? ' root' : '');
+    el.style.left = nd.x + 'px';
+    el.style.top = nd.y + 'px';
+    el.dataset.id = nd.id;
+
+    const inner = document.createElement('div');
+    inner.className = 'node-inner';
+    if (editingNodeId === nd.id) {
+      const inp = document.createElement('input');
+      inp.value = nd.text;
+      inp.oninput = () => { nd.text = inp.value; n.updatedAt = Date.now(); persist(); };
+      inp.onblur = () => { editingNodeId = null; renderMap(); renderList(); };
+      inp.onkeydown = (e) => { if(e.key==='Enter'){ editingNodeId=null; renderMap(); renderList(); } };
+      inp.onpointerdown = e => e.stopPropagation();
+      inner.appendChild(inp);
+      setTimeout(()=>inp.focus(),0);
+    } else {
+      const span = document.createElement('span');
+      span.textContent = nd.text || '（空白）';
+      inner.appendChild(span);
     }
-    onChange(nodes.filter((n) => !toDelete.has(n.id)));
-  };
+    el.appendChild(inner);
 
-  const updateText = (id, text) => {
-    onChange(nodes.map((n) => (n.id === id ? { ...n, text } : n)));
-  };
+    // 按鈕
+    const btns = document.createElement('div');
+    btns.className = 'node-btns';
+    const addB = document.createElement('button');
+    addB.className = 'add-btn'; addB.title='加子節點';
+    addB.innerHTML = '<svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>';
+    addB.onpointerdown = e => e.stopPropagation();
+    addB.onclick = () => addChild(nd.id);
+    btns.appendChild(addB);
+    if (!isRoot) {
+      const rmB = document.createElement('button');
+      rmB.className = 'rm-btn'; rmB.title='刪除';
+      rmB.innerHTML = '<svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>';
+      rmB.onpointerdown = e => e.stopPropagation();
+      rmB.onclick = () => deleteMapNode(nd.id);
+      btns.appendChild(rmB);
+    }
+    el.appendChild(btns);
 
-  const onPointerDown = (e, id) => {
-    if (editingId === id) return;
-    const rect = containerRef.current.getBoundingClientRect();
-    const node = getNode(id);
-    dragRef.current = {
-      id,
-      offsetX: e.clientX - rect.left - node.x,
-      offsetY: e.clientY - rect.top - node.y,
+    // 拖曳
+    el.onpointerdown = (e) => {
+      if (editingNodeId === nd.id) return;
+      const rect = document.getElementById('canvasScroll').getBoundingClientRect();
+      const scroll = document.getElementById('canvasScroll');
+      drag = {
+        id: nd.id,
+        offsetX: e.clientX - rect.left + scroll.scrollLeft - nd.x,
+        offsetY: e.clientY - rect.top + scroll.scrollTop - nd.y,
+      };
     };
-  };
+    el.ondblclick = () => { editingNodeId = nd.id; renderMap(); };
 
-  const onPointerMove = useCallback(
-    (e) => {
-      if (!dragRef.current) return;
-      const rect = containerRef.current.getBoundingClientRect();
-      const { id, offsetX, offsetY } = dragRef.current;
-      const x = e.clientX - rect.left - offsetX;
-      const y = e.clientY - rect.top - offsetY;
-      onChange(nodes.map((n) => (n.id === id ? { ...n, x, y } : n)));
-    },
-    [nodes, onChange]
-  );
-
-  const onPointerUp = () => {
-    dragRef.current = null;
-  };
-
-  return (
-    <div className="flex-1 flex flex-col overflow-hidden bg-slate-100">
-      <div className="px-4 py-2 text-xs text-slate-500 bg-white border-b border-slate-200">
-        提示：撳節點嘅 <CornerDownRight size={12} className="inline" /> 加子節點 ·
-        拖曳可移動 · 雙擊改字
-      </div>
-      <div
-        ref={containerRef}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerLeave={onPointerUp}
-        className="relative flex-1 overflow-auto touch-none"
-        style={{ minHeight: 0 }}
-      >
-        <div className="relative" style={{ width: 2000, height: 1400 }}>
-          <svg className="absolute top-0 left-0" width={2000} height={1400}>
-            {nodes.map((n) => {
-              if (!n.parentId) return null;
-              const p = getNode(n.parentId);
-              if (!p) return null;
-              return (
-                <line
-                  key={'line-' + n.id}
-                  x1={p.x}
-                  y1={p.y}
-                  x2={n.x}
-                  y2={n.y}
-                  stroke="#94a3b8"
-                  strokeWidth={2}
-                />
-              );
-            })}
-          </svg>
-
-          {nodes.map((n) => {
-            const isRoot = n.id === 'root';
-            return (
-              <div
-                key={n.id}
-                onPointerDown={(e) => onPointerDown(e, n.id)}
-                onDoubleClick={() => setEditingId(n.id)}
-                className={`group absolute -translate-x-1/2 -translate-y-1/2 select-none cursor-grab active:cursor-grabbing rounded-xl shadow-md border-2 ${
-                  isRoot
-                    ? 'bg-emerald-500 border-emerald-600 text-white'
-                    : 'bg-white border-slate-300 text-slate-800'
-                }`}
-                style={{ left: n.x, top: n.y, maxWidth: 220 }}
-              >
-                <div className="px-4 py-2 flex items-center gap-2">
-                  {editingId === n.id ? (
-                    <input
-                      autoFocus
-                      value={n.text}
-                      onChange={(e) => updateText(n.id, e.target.value)}
-                      onBlur={() => setEditingId(null)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') setEditingId(null);
-                      }}
-                      className={`outline-none bg-transparent text-sm w-32 ${
-                        isRoot ? 'placeholder-emerald-100' : ''
-                      }`}
-                    />
-                  ) : (
-                    <span className="text-sm font-medium whitespace-nowrap overflow-hidden text-ellipsis">
-                      {n.text || '（空白）'}
-                    </span>
-                  )}
-                </div>
-
-                {/* 按鈕 */}
-                <div className="absolute -right-2 -top-2 flex gap-1 opacity-0 group-hover:opacity-100 transition">
-                  <button
-                    onPointerDown={(e) => e.stopPropagation()}
-                    onClick={() => addChild(n.id)}
-                    className="w-6 h-6 rounded-full bg-indigo-500 text-white flex items-center justify-center shadow hover:bg-indigo-600"
-                    title="加子節點"
-                  >
-                    <CornerDownRight size={13} />
-                  </button>
-                  {!isRoot && (
-                    <button
-                      onPointerDown={(e) => e.stopPropagation()}
-                      onClick={() => deleteNode(n.id)}
-                      className="w-6 h-6 rounded-full bg-red-500 text-white flex items-center justify-center shadow hover:bg-red-600"
-                      title="刪除"
-                    >
-                      <X size={13} />
-                    </button>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
+    canvas.appendChild(el);
+  });
 }
+
+function addChild(parentId) {
+  const n = getActive();
+  const p = n.nodes.find(x => x.id === parentId);
+  const newNode = {
+    id: 'n' + Date.now(),
+    parentId,
+    text: '新節點',
+    x: p.x + 170,
+    y: p.y + (Math.random()*120 - 60),
+  };
+  n.nodes.push(newNode);
+  n.updatedAt = Date.now();
+  editingNodeId = newNode.id;
+  persist(); renderMap(); renderList();
+}
+
+function deleteMapNode(id) {
+  const n = getActive();
+  const toDelete = new Set([id]);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    n.nodes.forEach(nd => {
+      if (nd.parentId && toDelete.has(nd.parentId) && !toDelete.has(nd.id)) {
+        toDelete.add(nd.id); changed = true;
+      }
+    });
+  }
+  n.nodes = n.nodes.filter(nd => !toDelete.has(nd.id));
+  n.updatedAt = Date.now();
+  persist(); renderMap(); renderList();
+}
+
+document.addEventListener('pointermove', (e) => {
+  if (!drag) return;
+  const n = getActive(); if(!n) return;
+  const scroll = document.getElementById('canvasScroll');
+  const rect = scroll.getBoundingClientRect();
+  const nd = n.nodes.find(x => x.id === drag.id);
+  nd.x = e.clientX - rect.left + scroll.scrollLeft - drag.offsetX;
+  nd.y = e.clientY - rect.top + scroll.scrollTop - drag.offsetY;
+  n.updatedAt = Date.now();
+  // 只更新位置，避免重繪成本
+  const el = document.querySelector('.node[data-id="'+drag.id+'"]');
+  if (el) { el.style.left = nd.x+'px'; el.style.top = nd.y+'px'; }
+  // 更新連線
+  const lines = document.getElementById('lines');
+  let lineHtml = '';
+  n.nodes.forEach(x => {
+    if (!x.parentId) return;
+    const p = n.nodes.find(y => y.id === x.parentId);
+    if (!p) return;
+    lineHtml += `<line x1="${p.x}" y1="${p.y}" x2="${x.x}" y2="${x.y}" stroke="#94a3b8" stroke-width="2"/>`;
+  });
+  lines.innerHTML = lineHtml;
+});
+document.addEventListener('pointerup', () => {
+  if (drag) { persist(); drag = null; }
+});
+
+// 初始化
+load();
+renderAll();
+</script>
+</body>
+</html>
