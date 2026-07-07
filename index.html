@@ -9,6 +9,7 @@
   :root {
     --indigo: #6366f1; --indigo-d: #4f46e5;
     --emerald: #10b981; --emerald-d: #059669;
+    --amber: #f59e0b; --amber-d: #d97706;
     --slate50:#f8fafc; --slate100:#f1f5f9; --slate200:#e2e8f0;
     --slate300:#cbd5e1; --slate400:#94a3b8; --slate800:#1e293b;
   }
@@ -27,7 +28,7 @@
   .side-head { padding: 16px; border-bottom: 1px solid var(--slate200); }
   .side-title { font-size: 18px; font-weight: 700; display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
   .side-title svg { color: var(--indigo); }
-  .new-btns { display: flex; gap: 8px; }
+  .new-btns { display: flex; gap: 8px; margin-bottom: 8px; }
   .new-btns button {
     flex: 1; display: flex; align-items: center; justify-content: center; gap: 4px;
     padding: 8px; border: none; border-radius: 8px; color: #fff; font-size: 14px;
@@ -37,6 +38,15 @@
   .btn-note:hover { background: var(--indigo-d); }
   .btn-map { background: var(--emerald); }
   .btn-map:hover { background: var(--emerald-d); }
+
+  .io-btns { display: flex; gap: 8px; }
+  .io-btns button {
+    flex: 1; display: flex; align-items: center; justify-content: center; gap: 4px;
+    padding: 7px; border: 1px solid var(--slate200); border-radius: 8px;
+    background: #fff; color: #475569; font-size: 13px; cursor: pointer; transition: all .2s;
+  }
+  .io-btns button:hover { background: var(--slate50); border-color: var(--slate300); }
+  .io-btns svg { color: var(--amber-d); }
 
   .search-wrap { padding: 12px; border-bottom: 1px solid var(--slate100); position: relative; }
   .search-wrap svg { position: absolute; left: 22px; top: 21px; color: var(--slate400); }
@@ -109,6 +119,15 @@
   .add-btn { background: var(--indigo); } .add-btn:hover { background: var(--indigo-d); }
   .rm-btn { background: #ef4444; } .rm-btn:hover { background: #dc2626; }
 
+  /* Toast */
+  .toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px);
+    background: var(--slate800); color: #fff; padding: 12px 20px; border-radius: 10px;
+    font-size: 14px; box-shadow: 0 4px 12px rgba(0,0,0,.25); opacity: 0; pointer-events: none;
+    transition: all .3s; z-index: 100; display: flex; align-items: center; gap: 8px;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
   .hidden { display: none !important; }
 </style>
 </head>
@@ -125,6 +144,17 @@
         <button class="btn-note" onclick="createNote('note')">＋ 筆記</button>
         <button class="btn-map" onclick="createNote('mindmap')">＋ 心智圖</button>
       </div>
+      <div class="io-btns">
+        <button onclick="exportData()" title="匯出到 iCloud Drive">
+          <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5M12 15V3"/></svg>
+          匯出
+        </button>
+        <button onclick="triggerImport()" title="從 iCloud Drive 匯入">
+          <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 9l5-5 5 5M12 4v12"/></svg>
+          匯入
+        </button>
+      </div>
+      <input type="file" id="importFile" accept=".json,application/json" style="display:none" onchange="importData(event)">
     </div>
     <div class="search-wrap">
       <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
@@ -166,6 +196,8 @@
   </main>
 </div>
 
+<div class="toast" id="toast"></div>
+
 <script>
 let notes = [];
 let activeId = null;
@@ -185,6 +217,70 @@ function persist() {
 }
 
 function getActive() { return notes.find(n => n.id === activeId); }
+
+// ---- Toast ----
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(()=> t.classList.remove('show'), 2500);
+}
+
+// ---- 匯出 / 匯入 ----
+function exportData() {
+  if (!notes.length) { showToast('未有內容可以匯出'); return; }
+  const data = {
+    app: 'my-notes',
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    notes: notes,
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const stamp = new Date().toISOString().slice(0,10);
+  a.href = url;
+  a.download = `我的筆記備份_${stamp}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(()=> URL.revokeObjectURL(url), 1000);
+  showToast('已匯出，揀「iCloud Drive」儲存即可 ☁️');
+}
+
+function triggerImport() {
+  document.getElementById('importFile').click();
+}
+
+function importData(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    try {
+      const data = JSON.parse(ev.target.result);
+      const incoming = Array.isArray(data) ? data : data.notes;
+      if (!Array.isArray(incoming)) throw new Error('格式錯誤');
+
+      // 合併：以 id 去重，匯入嘅覆蓋舊嘅
+      const map = {};
+      notes.forEach(n => map[n.id] = n);
+      let added = 0;
+      incoming.forEach(n => {
+        if (n && n.id) { if(!map[n.id]) added++; map[n.id] = n; }
+      });
+      notes = Object.values(map).sort((a,b)=> (b.updatedAt||0) - (a.updatedAt||0));
+      if (notes.length) activeId = notes[0].id;
+      persist(); renderAll();
+      showToast(`匯入成功！新增 ${added} 項，共 ${notes.length} 項`);
+    } catch(err) {
+      showToast('匯入失敗：檔案格式唔啱');
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = ''; // reset 讓同一檔案可再選
+}
 
 function createNote(type) {
   const base = { id: Date.now(), type, title: '', updatedAt: Date.now() };
@@ -315,7 +411,6 @@ function renderMap() {
   const canvas = document.getElementById('canvas');
   const lines = document.getElementById('lines');
 
-  // 連線
   let lineHtml = '';
   n.nodes.forEach(nd => {
     if (!nd.parentId) return;
@@ -325,7 +420,6 @@ function renderMap() {
   });
   lines.innerHTML = lineHtml;
 
-  // 移除舊節點
   canvas.querySelectorAll('.node').forEach(el => el.remove());
 
   n.nodes.forEach(nd => {
@@ -354,7 +448,6 @@ function renderMap() {
     }
     el.appendChild(inner);
 
-    // 按鈕
     const btns = document.createElement('div');
     btns.className = 'node-btns';
     const addB = document.createElement('button');
@@ -373,11 +466,10 @@ function renderMap() {
     }
     el.appendChild(btns);
 
-    // 拖曳
     el.onpointerdown = (e) => {
       if (editingNodeId === nd.id) return;
-      const rect = document.getElementById('canvasScroll').getBoundingClientRect();
       const scroll = document.getElementById('canvasScroll');
+      const rect = scroll.getBoundingClientRect();
       drag = {
         id: nd.id,
         offsetX: e.clientX - rect.left + scroll.scrollLeft - nd.x,
@@ -432,10 +524,8 @@ document.addEventListener('pointermove', (e) => {
   nd.x = e.clientX - rect.left + scroll.scrollLeft - drag.offsetX;
   nd.y = e.clientY - rect.top + scroll.scrollTop - drag.offsetY;
   n.updatedAt = Date.now();
-  // 只更新位置，避免重繪成本
   const el = document.querySelector('.node[data-id="'+drag.id+'"]');
   if (el) { el.style.left = nd.x+'px'; el.style.top = nd.y+'px'; }
-  // 更新連線
   const lines = document.getElementById('lines');
   let lineHtml = '';
   n.nodes.forEach(x => {
@@ -450,7 +540,6 @@ document.addEventListener('pointerup', () => {
   if (drag) { persist(); drag = null; }
 });
 
-// 初始化
 load();
 renderAll();
 </script>
