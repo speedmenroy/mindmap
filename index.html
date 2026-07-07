@@ -1,303 +1,405 @@
-<!DOCTYPE html>
-<html lang="zh-HK">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Mind Notebook</title>
-<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-<script src="https://cdn.tailwindcss.com"></script>
-<style>
-  html, body { margin: 0; padding: 0; }
-  * { -webkit-tap-highlight-color: transparent; }
-</style>
-</head>
-<body>
-<div id="root"></div>
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import {
+  Plus, Trash2, PanelLeftClose, PanelLeftOpen, Save, FileText,
+  Search, Network, CornerDownRight, X
+} from 'lucide-react';
 
-<script type="text/babel">
-const { useState, useRef, useEffect } = React;
-
-// ---- Tiny inline SVG icons ----
-const Icon = ({ d, size = 20, cls = "" }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24"
-    fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={cls}>
-    {d}
-  </svg>
-);
-const IChevronLeft = (p) => <Icon {...p} d={<polyline points="15 18 9 12 15 6" />} />;
-const IChevronRight = (p) => <Icon {...p} d={<polyline points="9 18 15 12 9 6" />} />;
-const IPlus = (p) => <Icon {...p} d={<g><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></g>} />;
-const INetwork = (p) => <Icon {...p} d={<g><rect x="9" y="2" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="16" y="16" width="6" height="6" rx="1"/><path d="M12 8v4M12 12H5v4M12 12h7v4"/></g>} />;
-const IType = (p) => <Icon {...p} d={<g><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></g>} />;
-const IPenLine = (p) => <Icon {...p} d={<g><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></g>} />;
-const IPalette = (p) => <Icon {...p} d={<g><circle cx="13.5" cy="6.5" r="1"/><circle cx="17.5" cy="10.5" r="1"/><circle cx="8.5" cy="7.5" r="1"/><circle cx="6.5" cy="12.5" r="1"/><path d="M12 2a10 10 0 1 0 0 20 2 2 0 0 0 2-2v-1a2 2 0 0 1 2-2h1a4 4 0 0 0 4-4 10 10 0 0 0-9-9Z"/></g>} />;
-const IX = (p) => <Icon {...p} d={<g><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></g>} />;
-const ITrash = (p) => <Icon {...p} d={<g><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></g>} />;
-const ICheck = (p) => <Icon {...p} d={<polyline points="20 6 9 17 4 12" />} />;
-const ICloud = (p) => <Icon {...p} d={<path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10Z"/>} />;
-const IGrip = (p) => <Icon {...p} d={<g><circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="18" r="1"/></g>} />;
-const IDownload = (p) => <Icon {...p} d={<g><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></g>} />;
-const IUpload = (p) => <Icon {...p} d={<g><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></g>} />;
-
-const BG_COLORS = [
-  { name: 'Cream', page: 'bg-amber-50', line: 'text-amber-200' },
-  { name: 'Peach', page: 'bg-orange-50', line: 'text-orange-200' },
-  { name: 'Rose', page: 'bg-rose-50', line: 'text-rose-200' },
-  { name: 'Mint', page: 'bg-emerald-50', line: 'text-emerald-200' },
-  { name: 'Sky', page: 'bg-sky-50', line: 'text-sky-200' },
-  { name: 'Lavender', page: 'bg-violet-50', line: 'text-violet-200' },
-  { name: 'White', page: 'bg-stone-50', line: 'text-stone-200' },
-];
-const NODE_COLORS = ['bg-amber-200','bg-rose-200','bg-emerald-200','bg-sky-200','bg-violet-200','bg-orange-200'];
-const STORAGE_KEY = 'mind_notebook_v1';
-
-function MindNotebook() {
-  const [pages, setPages] = useState([{ id:1, mode:null, bgIdx:0, text:'', essay:'', essayTitle:'', nodes:[] }]);
-  const [current, setCurrent] = useState(0);
-  const [nextId, setNextId] = useState(2);
-  const [showPalette, setShowPalette] = useState(false);
-  const [nextNodeId, setNextNodeId] = useState(1);
-  const [saveState, setSaveState] = useState('saved');
-  const [loaded, setLoaded] = useState(false);
-  const [toast, setToast] = useState(null);
-  const dragRef = useRef(null);
-  const areaRef = useRef(null);
-  const saveTimer = useRef(null);
-  const fileRef = useRef(null);
-
-  const flash = (msg) => { setToast(msg); setTimeout(() => setToast(null), 2200); };
+export default function NotesApp() {
+  const [notes, setNotes] = useState([]);
+  const [activeId, setActiveId] = useState(null);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [search, setSearch] = useState('');
+  const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
+      const raw = localStorage.getItem('my-notes-v2');
       if (raw) {
-        const data = JSON.parse(raw);
-        if (data.pages && data.pages.length) {
-          setPages(data.pages);
-          setNextId(data.nextId || data.pages.length + 1);
-          setNextNodeId(data.nextNodeId || 1);
-          setCurrent(Math.min(data.current || 0, data.pages.length - 1));
-        }
+        const parsed = JSON.parse(raw);
+        setNotes(parsed);
+        if (parsed.length > 0) setActiveId(parsed[0].id);
       }
     } catch (e) {}
-    setLoaded(true);
   }, []);
 
-  useEffect(() => {
-    if (!loaded) return;
-    setSaveState('saving');
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => {
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ pages, nextId, nextNodeId, current })); } catch(e){}
-      setSaveState('saved');
-    }, 600);
-    return () => clearTimeout(saveTimer.current);
-  }, [pages, nextId, nextNodeId, current, loaded]);
-
-  const page = pages[current];
-  const bg = BG_COLORS[page.bgIdx];
-  const updatePage = (patch) => setPages(pages.map((p,i)=> i===current ? {...p,...patch} : p));
-
-  const addPage = () => {
-    const np = { id: nextId, mode:null, bgIdx: page.bgIdx, text:'', essay:'', essayTitle:'', nodes:[] };
-    const arr = [...pages]; arr.splice(current+1,0,np);
-    setPages(arr); setNextId(nextId+1); setCurrent(current+1); setShowPalette(false);
-  };
-  const deletePage = () => {
-    if (pages.length===1) { updatePage({ mode:null, text:'', essay:'', essayTitle:'', nodes:[] }); return; }
-    const arr = pages.filter((_,i)=> i!==current);
-    setPages(arr); setCurrent(Math.max(0,current-1));
-  };
-
-  const handleExport = () => {
+  const persist = (list) => {
+    setNotes(list);
     try {
-      const payload = { version:1, exportedAt:new Date().toISOString(), pages, nextId, nextNodeId, current };
-      const blob = new Blob([JSON.stringify(payload,null,2)], { type:'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `mind-notebook-${new Date().toISOString().slice(0,10)}.json`;
-      document.body.appendChild(a); a.click(); document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      flash('已匯出 ✦ 檔案已下載');
-    } catch(e) { flash('匯出失敗'); }
+      localStorage.setItem('my-notes-v2', JSON.stringify(list));
+    } catch (e) {}
   };
-  const handleImportClick = () => fileRef.current && fileRef.current.click();
-  const handleImportFile = (e) => {
-    const file = e.target.files && e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      try {
-        const data = JSON.parse(ev.target.result);
-        if (!data.pages || !Array.isArray(data.pages) || !data.pages.length) { flash('檔案格式無效'); return; }
-        setPages(data.pages);
-        setNextId(data.nextId || data.pages.length + 1);
-        setNextNodeId(data.nextNodeId || 1);
-        setCurrent(Math.min(data.current || 0, data.pages.length - 1));
-        flash('已匯入 ✦ 筆記已還原');
-      } catch(err) { flash('無法讀取檔案'); }
+
+  const activeNote = notes.find((n) => n.id === activeId);
+
+  const createNote = (type) => {
+    const base = {
+      id: Date.now(),
+      type,
+      title: '',
+      updatedAt: Date.now(),
     };
-    reader.readAsText(file);
-    e.target.value = '';
+    let newNote;
+    if (type === 'mindmap') {
+      newNote = {
+        ...base,
+        nodes: [
+          { id: 'root', parentId: null, text: '中心主題', x: 300, y: 220 },
+        ],
+      };
+    } else {
+      newNote = { ...base, body: '' };
+    }
+    const list = [newNote, ...notes];
+    persist(list);
+    setActiveId(newNote.id);
   };
 
-  const addNode = () => {
-    const n = { nid: nextNodeId, text:'Idea', x:30+Math.random()*40, y:25+Math.random()*50, colorIdx: page.nodes.length % NODE_COLORS.length };
-    updatePage({ nodes: [...page.nodes, n] }); setNextNodeId(nextNodeId+1);
+  const updateActive = (patch) => {
+    const list = notes.map((n) =>
+      n.id === activeId ? { ...n, ...patch, updatedAt: Date.now() } : n
+    );
+    persist(list);
   };
-  const updateNode = (nid, patch) => updatePage({ nodes: page.nodes.map(n=> n.nid===nid ? {...n,...patch} : n) });
-  const removeNode = (nid) => updatePage({ nodes: page.nodes.filter(n=> n.nid!==nid) });
-  const startDrag = (e, nid) => { e.preventDefault(); dragRef.current = nid; };
-  const onMove = (e) => {
-    if (dragRef.current == null || !areaRef.current) return;
-    const rect = areaRef.current.getBoundingClientRect();
-    const cx = e.touches ? e.touches[0].clientX : e.clientX;
-    const cy = e.touches ? e.touches[0].clientY : e.clientY;
-    const x = ((cx-rect.left)/rect.width)*100, y = ((cy-rect.top)/rect.height)*100;
-    updateNode(dragRef.current, { x:Math.max(5,Math.min(95,x)), y:Math.max(8,Math.min(92,y)) });
-  };
-  const endDrag = () => { dragRef.current = null; };
 
-  const MODES = [
-    { key:'mindmap', label:'Mindmap', icon:INetwork },
-    { key:'text', label:'Notes', icon:IType },
-    { key:'essay', label:'Essay', icon:IPenLine },
-  ];
+  const saveNote = () => {
+    setSaved(true);
+    setTimeout(() => setSaved(false), 1500);
+  };
+
+  const deleteNote = (id) => {
+    const list = notes.filter((n) => n.id !== id);
+    persist(list);
+    if (activeId === id) setActiveId(list.length > 0 ? list[0].id : null);
+  };
+
+  const formatDate = (ts) => {
+    const d = new Date(ts);
+    return (
+      d.toLocaleDateString('zh-HK', { month: 'short', day: 'numeric' }) +
+      ' ' +
+      d.toLocaleTimeString('zh-HK', { hour: '2-digit', minute: '2-digit' })
+    );
+  };
+
+  const filtered = notes.filter((n) => {
+    const q = search.toLowerCase();
+    const inTitle = (n.title || '').toLowerCase().includes(q);
+    const inBody = (n.body || '').toLowerCase().includes(q);
+    const inNodes = (n.nodes || []).some((nd) =>
+      (nd.text || '').toLowerCase().includes(q)
+    );
+    return inTitle || inBody || inNodes;
+  });
 
   return (
-    <div className="min-h-screen bg-stone-200 py-6 px-3 flex flex-col items-center">
-      <input ref={fileRef} type="file" accept="application/json,.json" onChange={handleImportFile} className="hidden" />
-      {toast && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-full bg-stone-800 text-amber-50 font-serif text-sm shadow-lg">{toast}</div>
-      )}
-
-      <div className="w-full max-w-3xl flex items-center justify-between mb-3 px-1 gap-2">
-        <span className="text-stone-500 font-serif text-sm tracking-widest whitespace-nowrap">頁 {current+1} / {pages.length}</span>
-        <div className="flex items-center gap-2">
-          <button onClick={handleExport} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white shadow-sm hover:shadow text-stone-600 text-xs font-serif transition-all"><IDownload size={14}/> 匯出</button>
-          <button onClick={handleImportClick} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white shadow-sm hover:shadow text-stone-600 text-xs font-serif transition-all"><IUpload size={14}/> 匯入</button>
-          <span className="flex items-center gap-1.5 text-xs font-serif text-stone-500 whitespace-nowrap">
-            {saveState==='saving' ? <><ICloud size={14} cls="animate-pulse"/> 儲存中…</> : <><ICheck size={14} cls="text-emerald-600"/> 已儲存</>}
-          </span>
-        </div>
-      </div>
-
-      <div className={`relative w-full max-w-3xl ${bg.page} rounded-2xl shadow-2xl border border-stone-300 transition-colors duration-300 overflow-hidden`} style={{minHeight:'32rem'}}>
-        <div className="absolute left-0 top-0 bottom-0 w-8 flex flex-col justify-around items-center bg-stone-800/5">
-          {Array.from({length:12}).map((_,i)=>(<div key={i} className="w-3 h-3 rounded-full bg-stone-300 border border-stone-400/50"/>))}
-        </div>
-
-        <div className="pl-12 pr-6 py-8 h-full flex flex-col">
-          <h1 className="font-serif text-2xl md:text-3xl font-bold text-stone-800 mb-1 tracking-wide">What is in your mind?</h1>
-          <div className="h-px w-full bg-stone-300/70 mb-5" />
-
-          {!page.mode && (
-            <div className="flex-1 flex flex-col items-center justify-center gap-6">
-              <p className="text-stone-400 font-serif italic">揀一個方式開始…</p>
-              <div className="flex flex-wrap justify-center gap-4">
-                {MODES.map(m=>{ const I=m.icon; return (
-                  <button key={m.key} onClick={()=>updatePage({mode:m.key})} className="group flex flex-col items-center gap-2 px-6 py-5 rounded-2xl bg-white/70 border border-stone-300 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-200">
-                    <I size={32} cls="text-stone-600 group-hover:text-stone-900"/>
-                    <span className="font-serif text-stone-700 font-medium">{m.label}</span>
-                  </button>);})}
-              </div>
-            </div>
-          )}
-
-          {page.mode && (
-            <div className="flex items-center gap-2 mb-4">
-              {MODES.map(m=>{ const I=m.icon; const active=page.mode===m.key; return (
-                <button key={m.key} onClick={()=>updatePage({mode:m.key})} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-serif transition-all ${active?'bg-stone-800 text-amber-50 shadow':'bg-white/60 text-stone-500 hover:bg-white'}`}>
-                  <I size={16}/> {m.label}
-                </button>);})}
-            </div>
-          )}
-
-          {page.mode==='text' && (
-            <textarea value={page.text} onChange={(e)=>updatePage({text:e.target.value})} placeholder="寫低你腦入面諗緊嘅嘢…"
-              className="flex-1 w-full bg-transparent resize-none outline-none text-stone-700 font-serif text-lg placeholder-stone-400"
-              style={{ backgroundImage:'repeating-linear-gradient(transparent, transparent 31px, rgba(120,113,108,0.15) 32px)', lineHeight:'32px' }} />
-          )}
-
-          {page.mode==='essay' && (
-            <div className="flex-1 flex flex-col">
-              <input placeholder="文章標題…" value={page.essayTitle||''} onChange={(e)=>updatePage({essayTitle:e.target.value})}
-                className="w-full bg-transparent outline-none font-serif text-xl font-bold text-stone-800 text-center mb-3 placeholder-stone-400"/>
-              <textarea value={page.essay} onChange={(e)=>updatePage({essay:e.target.value})} placeholder="開始寫,一段一段咁…"
-                className="flex-1 w-full bg-transparent resize-none outline-none text-stone-700 font-serif text-base placeholder-stone-400 indent-8" style={{lineHeight:'32px'}}/>
-              <div className="text-right text-stone-400 text-xs font-serif mt-1">{page.essay.length} 字</div>
-            </div>
-          )}
-
-          {page.mode==='mindmap' && (
-            <div className="flex-1 flex flex-col">
-              <div className="flex items-center gap-3 mb-2">
-                <button onClick={addNode} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-stone-800 text-amber-50 text-sm font-serif hover:bg-stone-700 transition-colors"><IPlus size={16}/> 加想法</button>
-                <span className="text-stone-400 text-xs font-serif italic">喺格仔打字 · 拖動 <IGrip size={12} cls="inline"/> 嚟移動</span>
-              </div>
-              <div ref={areaRef} onMouseMove={onMove} onMouseUp={endDrag} onMouseLeave={endDrag} onTouchMove={onMove} onTouchEnd={endDrag}
-                className="relative flex-1 rounded-xl border border-dashed border-stone-300 bg-white/30 overflow-hidden" style={{minHeight:'20rem'}}>
-                <svg className="absolute inset-0 w-full h-full pointer-events-none">
-                  {page.nodes.map(n=>(<line key={n.nid} x1="50%" y1="50%" x2={`${n.x}%`} y2={`${n.y}%`} className={bg.line} stroke="currentColor" strokeWidth="2"/>))}
-                </svg>
-                <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
-                  <div className="px-5 py-3 rounded-full bg-stone-800 text-amber-50 font-serif font-bold shadow-lg text-center">核心</div>
-                </div>
-                {page.nodes.map(n=>(
-                  <div key={n.nid} className="absolute z-20 -translate-x-1/2 -translate-y-1/2 group" style={{left:`${n.x}%`, top:`${n.y}%`}}>
-                    <div className={`relative flex items-center rounded-xl ${NODE_COLORS[n.colorIdx]} shadow-md`}>
-                      <span onMouseDown={(e)=>startDrag(e,n.nid)} onTouchStart={(e)=>startDrag(e,n.nid)}
-                        className="flex items-center px-1 py-1.5 cursor-move text-stone-500 hover:text-stone-800 select-none touch-none" style={{touchAction:'none'}}>
-                        <IGrip size={16}/>
-                      </span>
-                      <input value={n.text} onChange={(e)=>updateNode(n.nid,{text:e.target.value})} placeholder="打字…"
-                        className="bg-transparent outline-none pr-3 py-1.5 font-serif text-stone-800 text-sm placeholder-stone-500/60"
-                        style={{ width:`${Math.max(5, n.text.length+2)}ch` }}/>
-                      <button onClick={()=>removeNode(n.nid)} className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-white shadow flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                        <IX size={12} cls="text-stone-500"/>
-                      </button>
-                    </div>
-                  </div>
-                ))}
-                {page.nodes.length===0 && (
-                  <div className="absolute inset-0 flex items-end justify-center pb-6 pointer-events-none">
-                    <span className="text-stone-400 font-serif text-sm">加一個想法,然後拖動排位 ✦</span>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="absolute bottom-3 right-4 flex items-center gap-2">
-          <div className="relative">
-            <button onClick={()=>setShowPalette(!showPalette)} className="p-2 rounded-full bg-white/80 shadow hover:bg-white transition-colors"><IPalette size={16} cls="text-stone-600"/></button>
-            {showPalette && (
-              <div className="absolute bottom-11 right-0 flex flex-wrap gap-2 p-2 rounded-xl bg-white shadow-lg border border-stone-200 w-40">
-                {BG_COLORS.map((col,idx)=>(
-                  <button key={idx} onClick={()=>{updatePage({bgIdx:idx});setShowPalette(false);}}
-                    className={`w-7 h-7 rounded-full ${col.page} border-2 ${page.bgIdx===idx?'border-stone-800':'border-stone-300'} hover:scale-110 transition-transform`} title={col.name}/>
-                ))}
-              </div>
-            )}
+    <div className="flex h-screen w-full bg-slate-50 text-slate-800 font-sans overflow-hidden">
+      {/* Sidebar */}
+      <aside
+        className={`flex flex-col bg-white border-r border-slate-200 transition-all duration-300 ${
+          sidebarOpen ? 'w-72' : 'w-0'
+        } overflow-hidden`}
+      >
+        <div className="p-4 border-b border-slate-200">
+          <h1 className="font-bold text-lg flex items-center gap-2 mb-3">
+            <FileText size={20} className="text-indigo-500" />
+            我的筆記
+          </h1>
+          <div className="flex gap-2">
+            <button
+              onClick={() => createNote('note')}
+              className="flex-1 flex items-center justify-center gap-1 py-2 rounded-lg bg-indigo-500 text-white text-sm hover:bg-indigo-600 transition"
+            >
+              <Plus size={16} /> 筆記
+            </button>
+            <button
+              onClick={() => createNote('mindmap')}
+              className="flex-1 flex items-center justify-center gap-1 py-2 rounded-lg bg-emerald-500 text-white text-sm hover:bg-emerald-600 transition"
+            >
+              <Network size={16} /> 心智圖
+            </button>
           </div>
-          <button onClick={deletePage} className="p-2 rounded-full bg-white/80 shadow hover:bg-red-100 transition-colors"><ITrash size={16} cls="text-stone-600"/></button>
         </div>
-      </div>
 
-      <div className="flex items-center gap-4 mt-6">
-        <button onClick={()=>setCurrent(Math.max(0,current-1))} disabled={current===0} className="p-2.5 rounded-full bg-white shadow hover:shadow-md disabled:opacity-30 disabled:cursor-not-allowed transition-all"><IChevronLeft size={20} cls="text-stone-700"/></button>
-        <button onClick={addPage} className="flex items-center gap-1.5 px-5 py-2.5 rounded-full bg-stone-800 text-amber-50 font-serif shadow-lg hover:bg-stone-700 hover:-translate-y-0.5 transition-all"><IPlus size={16}/> 新一頁</button>
-        <button onClick={()=>setCurrent(Math.min(pages.length-1,current+1))} disabled={current===pages.length-1} className="p-2.5 rounded-full bg-white shadow hover:shadow-md disabled:opacity-30 disabled:cursor-not-allowed transition-all"><IChevronRight size={20} cls="text-stone-700"/></button>
-      </div>
+        <div className="p-3 border-b border-slate-100">
+          <div className="relative">
+            <Search size={16} className="absolute left-3 top-2.5 text-slate-400" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="搜尋…"
+              className="w-full pl-9 pr-3 py-2 text-sm rounded-lg bg-slate-100 focus:bg-white border border-transparent focus:border-indigo-300 outline-none transition"
+            />
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto">
+          {filtered.length === 0 && (
+            <p className="text-center text-sm text-slate-400 mt-8 px-4">
+              未有記錄，撳上面按鈕新增
+            </p>
+          )}
+          {filtered.map((n) => (
+            <div
+              key={n.id}
+              onClick={() => setActiveId(n.id)}
+              className={`group px-4 py-3 cursor-pointer border-b border-slate-50 flex items-start justify-between gap-2 ${
+                activeId === n.id
+                  ? 'bg-indigo-50 border-l-4 border-l-indigo-500'
+                  : 'hover:bg-slate-50 border-l-4 border-l-transparent'
+              }`}
+            >
+              <div className="min-w-0 flex-1">
+                <p className="font-medium text-sm truncate flex items-center gap-1.5">
+                  {n.type === 'mindmap' ? (
+                    <Network size={14} className="text-emerald-500 shrink-0" />
+                  ) : (
+                    <FileText size={14} className="text-indigo-400 shrink-0" />
+                  )}
+                  {n.title || (n.type === 'mindmap' ? '未命名心智圖' : '未命名筆記')}
+                </p>
+                <p className="text-xs text-slate-400 truncate mt-0.5">
+                  {n.type === 'mindmap'
+                    ? `${(n.nodes || []).length} 個節點`
+                    : n.body
+                    ? n.body.slice(0, 40)
+                    : '無內容'}
+                </p>
+                <p className="text-xs text-slate-300 mt-1">{formatDate(n.updatedAt)}</p>
+              </div>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  deleteNote(n.id);
+                }}
+                className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-red-500 transition"
+              >
+                <Trash2 size={16} />
+              </button>
+            </div>
+          ))}
+        </div>
+      </aside>
+
+      {/* Main */}
+      <main className="flex-1 flex flex-col min-w-0">
+        <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-200 bg-white">
+          <button
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            className="p-2 rounded-lg hover:bg-slate-100 text-slate-600 transition"
+          >
+            {sidebarOpen ? <PanelLeftClose size={20} /> : <PanelLeftOpen size={20} />}
+          </button>
+          {activeNote && (
+            <input
+              value={activeNote.title}
+              onChange={(e) => updateActive({ title: e.target.value })}
+              placeholder={activeNote.type === 'mindmap' ? '心智圖標題…' : '筆記標題…'}
+              className="flex-1 text-lg font-semibold outline-none bg-transparent placeholder-slate-300"
+            />
+          )}
+          {activeNote && (
+            <button
+              onClick={saveNote}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-500 text-white text-sm font-medium hover:bg-indigo-600 transition shrink-0"
+            >
+              <Save size={16} />
+              {saved ? '已儲存 ✓' : '儲存'}
+            </button>
+          )}
+        </div>
+
+        {!activeNote && (
+          <div className="flex-1 flex flex-col items-center justify-center text-slate-400">
+            <FileText size={48} className="mb-4 opacity-30" />
+            <p>撳左邊按鈕新增筆記或心智圖</p>
+          </div>
+        )}
+
+        {activeNote && activeNote.type === 'note' && (
+          <div className="flex-1 flex flex-col overflow-hidden px-6 md:px-12 py-6">
+            <textarea
+              value={activeNote.body}
+              onChange={(e) => updateActive({ body: e.target.value })}
+              placeholder="喺度開始打字…"
+              className="flex-1 w-full resize-none outline-none bg-transparent text-base leading-relaxed placeholder-slate-300"
+            />
+          </div>
+        )}
+
+        {activeNote && activeNote.type === 'mindmap' && (
+          <MindMap
+            nodes={activeNote.nodes}
+            onChange={(nodes) => updateActive({ nodes })}
+          />
+        )}
+      </main>
     </div>
   );
 }
 
-ReactDOM.createRoot(document.getElementById('root')).render(<MindNotebook />);
-</script>
-</body>
-</html>
+function MindMap({ nodes, onChange }) {
+  const containerRef = useRef(null);
+  const [editingId, setEditingId] = useState(null);
+  const dragRef = useRef(null);
+
+  const getNode = (id) => nodes.find((n) => n.id === id);
+
+  const addChild = (parentId) => {
+    const parent = getNode(parentId);
+    const newNode = {
+      id: 'n' + Date.now(),
+      parentId,
+      text: '新節點',
+      x: parent.x + 160,
+      y: parent.y + (Math.random() * 120 - 60),
+    };
+    onChange([...nodes, newNode]);
+    setEditingId(newNode.id);
+  };
+
+  const deleteNode = (id) => {
+    if (id === 'root') return;
+    // 連同所有後代一齊刪
+    const toDelete = new Set([id]);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      nodes.forEach((n) => {
+        if (n.parentId && toDelete.has(n.parentId) && !toDelete.has(n.id)) {
+          toDelete.add(n.id);
+          changed = true;
+        }
+      });
+    }
+    onChange(nodes.filter((n) => !toDelete.has(n.id)));
+  };
+
+  const updateText = (id, text) => {
+    onChange(nodes.map((n) => (n.id === id ? { ...n, text } : n)));
+  };
+
+  const onPointerDown = (e, id) => {
+    if (editingId === id) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const node = getNode(id);
+    dragRef.current = {
+      id,
+      offsetX: e.clientX - rect.left - node.x,
+      offsetY: e.clientY - rect.top - node.y,
+    };
+  };
+
+  const onPointerMove = useCallback(
+    (e) => {
+      if (!dragRef.current) return;
+      const rect = containerRef.current.getBoundingClientRect();
+      const { id, offsetX, offsetY } = dragRef.current;
+      const x = e.clientX - rect.left - offsetX;
+      const y = e.clientY - rect.top - offsetY;
+      onChange(nodes.map((n) => (n.id === id ? { ...n, x, y } : n)));
+    },
+    [nodes, onChange]
+  );
+
+  const onPointerUp = () => {
+    dragRef.current = null;
+  };
+
+  return (
+    <div className="flex-1 flex flex-col overflow-hidden bg-slate-100">
+      <div className="px-4 py-2 text-xs text-slate-500 bg-white border-b border-slate-200">
+        提示：撳節點嘅 <CornerDownRight size={12} className="inline" /> 加子節點 ·
+        拖曳可移動 · 雙擊改字
+      </div>
+      <div
+        ref={containerRef}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerLeave={onPointerUp}
+        className="relative flex-1 overflow-auto touch-none"
+        style={{ minHeight: 0 }}
+      >
+        <div className="relative" style={{ width: 2000, height: 1400 }}>
+          <svg className="absolute top-0 left-0" width={2000} height={1400}>
+            {nodes.map((n) => {
+              if (!n.parentId) return null;
+              const p = getNode(n.parentId);
+              if (!p) return null;
+              return (
+                <line
+                  key={'line-' + n.id}
+                  x1={p.x}
+                  y1={p.y}
+                  x2={n.x}
+                  y2={n.y}
+                  stroke="#94a3b8"
+                  strokeWidth={2}
+                />
+              );
+            })}
+          </svg>
+
+          {nodes.map((n) => {
+            const isRoot = n.id === 'root';
+            return (
+              <div
+                key={n.id}
+                onPointerDown={(e) => onPointerDown(e, n.id)}
+                onDoubleClick={() => setEditingId(n.id)}
+                className={`group absolute -translate-x-1/2 -translate-y-1/2 select-none cursor-grab active:cursor-grabbing rounded-xl shadow-md border-2 ${
+                  isRoot
+                    ? 'bg-emerald-500 border-emerald-600 text-white'
+                    : 'bg-white border-slate-300 text-slate-800'
+                }`}
+                style={{ left: n.x, top: n.y, maxWidth: 220 }}
+              >
+                <div className="px-4 py-2 flex items-center gap-2">
+                  {editingId === n.id ? (
+                    <input
+                      autoFocus
+                      value={n.text}
+                      onChange={(e) => updateText(n.id, e.target.value)}
+                      onBlur={() => setEditingId(null)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') setEditingId(null);
+                      }}
+                      className={`outline-none bg-transparent text-sm w-32 ${
+                        isRoot ? 'placeholder-emerald-100' : ''
+                      }`}
+                    />
+                  ) : (
+                    <span className="text-sm font-medium whitespace-nowrap overflow-hidden text-ellipsis">
+                      {n.text || '（空白）'}
+                    </span>
+                  )}
+                </div>
+
+                {/* 按鈕 */}
+                <div className="absolute -right-2 -top-2 flex gap-1 opacity-0 group-hover:opacity-100 transition">
+                  <button
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={() => addChild(n.id)}
+                    className="w-6 h-6 rounded-full bg-indigo-500 text-white flex items-center justify-center shadow hover:bg-indigo-600"
+                    title="加子節點"
+                  >
+                    <CornerDownRight size={13} />
+                  </button>
+                  {!isRoot && (
+                    <button
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onClick={() => deleteNode(n.id)}
+                      className="w-6 h-6 rounded-full bg-red-500 text-white flex items-center justify-center shadow hover:bg-red-600"
+                      title="刪除"
+                    >
+                      <X size={13} />
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
